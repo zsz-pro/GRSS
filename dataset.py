@@ -4,6 +4,7 @@ from PIL import Image
 from torchvision import transforms
 import numpy as np
 import torch
+import cv2
 
 class MaskToTensor(object):
     def __call__(self, img):
@@ -85,8 +86,9 @@ class WHUOPTSARDataset(Dataset):
         self.sync_img_mask = []
 
         img_sar_dir = os.path.join(root, 'sar')
-        img_opt_dir = os.path.join(root, 'opt')
-        mask_dir = os.path.join(root, 'lbl')
+        img_opt_dir = os.path.join(root, 'rgb')
+        # mask_dir = os.path.join(root, 'lbl')
+        mask_dir = os.path.join(root, 'dsm')
 
         for img_filename in os.listdir(img_sar_dir):
             img_mask_pair = (os.path.join(img_sar_dir, img_filename),
@@ -100,18 +102,29 @@ class WHUOPTSARDataset(Dataset):
 
     def __getitem__(self, index):
         img_sar_path, img_opt_path, mask_path = self.sync_img_mask[index]
-        img_sar = Image.open(img_sar_path)
-        img_opt = Image.open(img_opt_path)
-        mask = Image.open(mask_path).convert('L')
+        img_sar = Image.open(img_sar_path)#mode:F32
+        img_opt = Image.open(img_opt_path)#mode:rgb
+        dsm = Image.open(mask_path)  #mode:F32      
+        mask = dsm.convert('L')#L:8bit
+            
+        mask = np.array(mask)
+        ret2, thresh2 = cv2.threshold(mask, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        ekernel = np.ones((7, 7), np.uint8)
+        dkernel = np.ones((7, 7), np.uint8)
+        #开运算 
+        erosion = cv2.dilate(thresh2, dkernel, iterations=1)
+        mask = cv2.erode(erosion, ekernel, iterations=1)
+        mask = Image.fromarray(mask)
         # transform
         if self.sync_transform is not None:
-            img_sar, img_opt, mask = self.sync_transform(img_sar, img_opt, mask)
+            img_sar, img_opt, mask, dsm = self.sync_transform(img_sar, img_opt, mask, dsm)#flip
         if self.img_sar_transform is not None:
             img_sar = self.img_sar_transform(img_sar)
+            dsm = self.img_sar_transform(dsm)   #both sar&dsm are float32,trans2tensor
             img_opt = self.img_opt_transform(img_opt)
         if self.mask_transform is not None:
-            mask = self.mask_transform(mask)
-        return img_sar, img_opt, mask
+            mask = self.mask_transform(mask)#float32->torch.int64???
+        return img_sar, img_opt, mask,dsm
 
     def __len__(self):
         return len(self.sync_img_mask)

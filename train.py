@@ -1,6 +1,8 @@
 import argparse
 import time
 import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 import json
 from dataset import RSDataset,WHUOPTSARDataset
 import sync_transforms
@@ -19,13 +21,14 @@ from torchvision import transforms
 from palette import colorize_mask
 from PIL import Image
 from collections import OrderedDict
+import cv2
 from tensorboardX import SummaryWriter
 from torch.optim import lr_scheduler
-from models.SOLC.solc import SOLC
-from models.SOLCV2.solcv2 import SOLCV2
-from models.SOLCV3.solcv3 import SOLCV3_res50
-from models.SOLCV4.solcv4 import SOLCV4
-from models.SOLCV5.solcv5 import SOLCV5
+# from models.SOLC.solc import SOLC
+# from models.SOLCV2.solcv2 import SOLCV2
+# from models.SOLCV3.solcv3 import SOLCV3_res50
+# from models.SOLCV4.solcv4 import SOLCV4
+# from models.SOLCV5.solcv5 import SOLCV5
 from models.SOLCV7.solcv7 import SOLCV7
 from models.MCANet.mcanet import MCANet
 from torch.optim.lr_scheduler import StepLR
@@ -109,6 +112,7 @@ def parse_args():
     parser.add_argument('--resume_total_epochs', type=int, default=500)
 
     args = parser.parse_args()
+    args.save_root = "/mnt/e67bb84d-54c9-4502-b46a-154b7875b215/zsz/datasets/GRSS/"
     directory = args.save_root + "/%s/%s/" % ( args.model, args.experiment_start_time)
     args.directory = directory
     if not os.path.exists(directory):
@@ -160,6 +164,9 @@ class Trainer(object):
         if dataset_name == 'seven': 
             from class_names import seven_classes
             class_name = seven_classes()
+        if dataset_name == 'two': 
+            from class_names import two_classes
+            class_name = two_classes()            
         self.train_dataset = WHUOPTSARDataset(class_name, root=args.train_data_root, mode='train', sync_transforms=sync_transform) # random flip
         self.train_loader = DataLoader(dataset=self.train_dataset,
                                        batch_size=args.train_batch_size,
@@ -180,8 +187,8 @@ class Trainer(object):
         print(self.train_dataset.class_names)
         self.class_loss_weight = torch.Tensor(args.class_loss_weight)
          # -===================！！！！！！！  ignore 0
-        self.criterion = nn.CrossEntropyLoss(weight=self.class_loss_weight, reduction='mean', ignore_index=0).cuda()
-
+        # self.criterion = nn.CrossEntropyLoss(weight=self.class_loss_weight, reduction='mean', ignore_index=0).cuda()
+        self.criterion = nn.CrossEntropyLoss().cuda()
         n_blocks = args.n_blocks
         n_blocks = [int(b) for b in n_blocks.split(',')]
         atrous_rates = args.deeplabv3_atrous_rates
@@ -313,10 +320,12 @@ class Trainer(object):
             imgs_opt = Variable(data[1])
             masks = Variable(data[2])
 
+            dsms = Variable(data[3])
+
             if self.args.use_cuda:
                 imgs_sar = imgs_sar.cuda()
                 imgs_opt = imgs_opt.cuda()
-                masks = masks.cuda()
+                masks = (masks/255).cuda()
             
             self.optimizer.zero_grad()
             
@@ -327,7 +336,7 @@ class Trainer(object):
             preds = preds.data.cpu().numpy().squeeze().astype(np.uint8)
 
 
-            loss = self.criterion(outputs, masks)
+            loss = self.criterion(outputs, masks.long())
 
             train_loss.update(loss, self.args.train_batch_size)
             writer.add_scalar('train_loss', train_loss.avg, curr_iter)
@@ -440,6 +449,12 @@ class Trainer(object):
 if __name__ == "__main__":
     torch.backends.cudnn.benchmark = True
     args = parse_args()
+    args.train_data_root = "/mnt/e67bb84d-54c9-4502-b46a-154b7875b215/zsz/datasets/GRSS/train/"
+    args.val_data_root = "/mnt/e67bb84d-54c9-4502-b46a-154b7875b215/zsz/datasets/GRSS/val/"
+    args.save_root = "/mnt/e67bb84d-54c9-4502-b46a-154b7875b215/zsz/datasets/GRSS/"
+    args.dataset_name = "two"
+    args.class_loss_weight =[0.0, 0.016682825992096393]
+    # args.gpu_ids = [3]
     writer = SummaryWriter(args.directory)
     trainer = Trainer(args)
     

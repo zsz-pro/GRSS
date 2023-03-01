@@ -79,13 +79,13 @@ class SOLCV7(nn.Module):
         self.sar_en1 = _EncoderBlock(1, 64) # 256->128, 1->64
         self.sar_en2 = _EncoderBlock(64, 256)  # 128->64, 64->256
         self.sar_en3 = _EncoderBlock(256, 512)  # 64->32, 256->512
-        self.sar_en4 = _EncoderBlock(512, 1024, downsample=False)  # 32->32 *** , 512->1024
+        self.sar_en4 = _EncoderBlock(512, 1024)  # 32->32 *** , 512->1024
         self.sar_en5 = _EncoderBlock(1024, 2048, downsample=False)  # 32->32 *** , 1024->2048
 
-        self.opt_en1 = _EncoderBlock(4, 64) # 256->128, 4->64
+        self.opt_en1 = _EncoderBlock(3, 64) # 256->128, 4->64
         self.opt_en2 = _EncoderBlock(64, 256)  # 128->64, 64->256
         self.opt_en3 = _EncoderBlock(256, 512)  # 64->32, 256->512
-        self.opt_en4 = _EncoderBlock(512, 1024, downsample=False)  # 32->32 *** , 512->1024
+        self.opt_en4 = _EncoderBlock(512, 1024)  # 32->32 *** , 512->1024
         self.opt_en5 = _EncoderBlock(1024, 2048, downsample=False)  # 32->32 *** , 1024->2048
 
         self.aspp = BasicRFB(256 * 2, 256)

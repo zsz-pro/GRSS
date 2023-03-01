@@ -17,11 +17,11 @@ class ComposeWHU(object):
     def __init__(self, transforms):
         self.transforms = transforms
 
-    def __call__(self, img_sar, img_opt, mask):
+    def __call__(self, img_sar, img_opt, mask, dsm):
         assert img_sar.size == mask.size and img_opt.size == mask.size
         for t in self.transforms:
-            img_sar, img_opt, mask = t(img_sar, img_opt, mask)
-        return img_sar, img_opt, mask
+            img_sar, img_opt, mask, dsm = t(img_sar, img_opt, mask, dsm)
+        return img_sar, img_opt, mask, dsm
 
 class RandomScale(object):
     def __init__(self, base_size, crop_size, resize_scale_range):
@@ -94,9 +94,9 @@ class RandomFlipWHU(object):
     def __init__(self, flip_ratio=0.5):
         self.flip_ratio = flip_ratio
 
-    def __call__(self, img_sar, img_opt, mask):
+    def __call__(self, img_sar, img_opt, mask, dsm):
         if random.random() < self.flip_ratio:
-            img_sar, img_opt, mask = img_sar.transpose(Image.FLIP_LEFT_RIGHT), img_opt.transpose(Image.FLIP_LEFT_RIGHT), mask.transpose(Image.FLIP_LEFT_RIGHT)
+            img_sar, img_opt, mask, dsm = img_sar.transpose(Image.FLIP_LEFT_RIGHT), img_opt.transpose(Image.FLIP_LEFT_RIGHT), mask.transpose(Image.FLIP_LEFT_RIGHT), dsm.transpose(Image.FLIP_LEFT_RIGHT)
         else:
-            img_sar, img_opt, mask = img_sar.transpose(Image.FLIP_TOP_BOTTOM), img_opt.transpose(Image.FLIP_TOP_BOTTOM),mask.transpose(Image.FLIP_TOP_BOTTOM)
-        return img_sar, img_opt, mask
+            img_sar, img_opt, mask, dsm = img_sar.transpose(Image.FLIP_TOP_BOTTOM), img_opt.transpose(Image.FLIP_TOP_BOTTOM), mask.transpose(Image.FLIP_TOP_BOTTOM), dsm.transpose(Image.FLIP_TOP_BOTTOM)
+        return img_sar, img_opt, mask, dsm

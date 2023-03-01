@@ -47,3 +47,7 @@ def five_classes():
                 '森林',
                 '草地',
                 '水体']
+        
+def two_classes():
+        return ['其他类别',
+                '建筑']
