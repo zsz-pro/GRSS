@@ -127,6 +127,14 @@ def parse_args():
         print("Using CPU")
     return args
 
+class Reg_loss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        crit = torch.nn.SmoothL1Loss()
+    def forward(self, x, y, pred):        
+        return crit(x,y)*pred
+
+
 class DeNormalize(object):
     def __init__(self, mean, std):
         self.mean = mean
@@ -263,7 +271,12 @@ class Trainer(object):
             print('======> model MCANet (Paper) =============== ')    
             # from models.SOLCV7.solcv7 import SOLCV7
             
+        if args.model == 'ournetv1':
+            from models.OurNet.ourv1 import OURV1
             
+            model = OURV1(num_classes=self.num_classes)
+            print('======> model OURV1 Version seven =============== ')    
+ 
         # print(model)
 
         if args.resume_model:
@@ -330,7 +343,11 @@ class Trainer(object):
             
             self.optimizer.zero_grad()
             
-            outputs = self.model(imgs_sar, imgs_opt)
+            if (args.model == 'ournetv1'):
+                outputs,height = self.model(imgs_sar, imgs_opt)
+            else:    
+                outputs= self.model(imgs_sar, imgs_opt)
+            # sigmoid()
             
             # torch.max(tensor, dim)：指定维度上最大的数，返回tensor和下标
             _, preds = torch.max(outputs, 1)
@@ -338,6 +355,12 @@ class Trainer(object):
 
 
             loss = self.criterion(outputs, masks.long())
+            if (args.model == 'ournetv1'):
+                loss_reg = self.criterion_reg(height, dsms.long(), preds)
+                loss = loss+loss_reg
+            # loss_mask = self.criterion(outputs, masks.long())
+             
+            # 
 
             train_loss.update(loss, self.args.train_batch_size)
             writer.add_scalar('train_loss', train_loss.avg, curr_iter)

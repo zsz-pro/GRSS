@@ -1,9 +1,16 @@
 import torch
 import torch.nn.functional as F
 from torch import nn
-from .aspp import _ASPP
+import sys
+#打印出当前的默认路径
+print (sys.path)
+#将/Path/to/your/dictionary 改为你程序的路径
+
+sys.path.append('/mnt/e67bb84d-54c9-4502-b46a-154b7875b215/zsz/SOLC/')
+
+from models.MCANet.aspp import _ASPP
 # from models.utils import initialize_weights
-from .mcam import MCAM
+from models.MCANet.mcam import MCAM
 
 
 def initialize_weights(*models):
@@ -57,7 +64,7 @@ class MCANet(nn.Module):
         self.sar_en4 = _EncoderBlock(512, 1024, downsample=False)  # 32->32 *** , 512->1024
         self.sar_en5 = _EncoderBlock(1024, 2048, downsample=False)  # 32->32 *** , 1024->2048
 
-        self.opt_en1 = _EncoderBlock(4, 64) # 256->128, 4->64
+        self.opt_en1 = _EncoderBlock(3, 64) # 256->128, 4->64
         self.opt_en2 = _EncoderBlock(64, 256)  # 128->64, 64->256
         self.opt_en3 = _EncoderBlock(256, 512)  # 64->32, 256->512
         self.opt_en4 = _EncoderBlock(512, 1024, downsample=False)  # 32->32 *** , 512->1024
@@ -124,9 +131,11 @@ class MCANet(nn.Module):
 
 if __name__ == "__main__":
     model = MCANet(num_classes=8)
+    model.cuda(2)
     model.train()
-    sar = torch.randn(2, 1, 256, 256)
-    opt = torch.randn(2, 4, 256, 256)
+    sar = torch.randn(2, 1, 256, 256).cuda(2)
+    opt = torch.randn(2, 3, 256, 256).cuda(2)
+    output = model(sar,opt)
     print(model)
     print("input:", sar.shape, opt.shape)
     print("output:", model(sar, opt).shape)

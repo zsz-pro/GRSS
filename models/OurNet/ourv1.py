@@ -9,7 +9,7 @@ print (sys.path)
 sys.path.append('/mnt/e67bb84d-54c9-4502-b46a-154b7875b215/zsz/SOLC/')
 # from aspp import _ASPP
 # from models.utils import initialize_weights
-from models.SOLCV7.aspp import BasicRFB
+from models.OurNet.aspp import BasicRFB
 from functools import reduce
 
 def initialize_weights(*models):
@@ -75,28 +75,61 @@ class SAGate(nn.Module):
 
         return V
 
+class UpSampleLayer(nn.Module):
+    def __init__(self,in_ch,out_ch):
+        # 512-1024-512
+        # 1024-512-256
+        # 512-256-128
+        # 256-128-64
+        super(UpSampleLayer, self).__init__()
+        self.Conv_BN_ReLU_2 = nn.Sequential(
+            nn.Conv2d(in_channels=in_ch, out_channels=out_ch*2, kernel_size=3, stride=1,padding=1),
+            nn.BatchNorm2d(out_ch*2),
+            nn.ReLU(),
+            nn.Conv2d(in_channels=out_ch*2, out_channels=out_ch*2, kernel_size=3, stride=1,padding=1),
+            nn.BatchNorm2d(out_ch*2),
+            nn.ReLU()
+        )
+        self.upsample=nn.Sequential(
+            nn.ConvTranspose2d(in_channels=out_ch*2,out_channels=out_ch,kernel_size=3,stride=2,padding=1,output_padding=1),
+            nn.BatchNorm2d(out_ch),
+            nn.ReLU()
+        )
+
+    def forward(self,x,out):
+        '''
+        :param x: 输入卷积层
+        :param out:与上采样层进行cat
+        :return:
+        '''
+        x_out=self.Conv_BN_ReLU_2(x)
+        x_out=self.upsample(x_out)
+        cat_out=torch.cat((x_out,out),dim=1)
+        return cat_out
 
 
-class SOLCV7(nn.Module):
+
+class OURV1(nn.Module):
     def __init__(self, num_classes, atrous_rates=[6,12,18]):
-        super(SOLCV7, self).__init__()
+        super(OURV1, self).__init__()
 
-
-        self.sar_en1 = _EncoderBlock(1, 64) # 256->128, 1->64
-        self.sar_en2 = _EncoderBlock(64, 256)  # 128->64, 64->256
+        self.sar_en0 = _EncoderBlock(1, 64, downsample=False) # 256->128, 1->64
+        self.sar_en1 = _EncoderBlock(64, 128) # 256->128, 1->64
+        self.sar_en2 = _EncoderBlock(128, 256)  # 128->64, 64->256
         self.sar_en3 = _EncoderBlock(256, 512)  # 64->32, 256->512
         self.sar_en4 = _EncoderBlock(512, 1024)  # 32->32 *** , 512->1024
         self.sar_en5 = _EncoderBlock(1024, 2048, downsample=False)  # 32->32 *** , 1024->2048
 
-        self.opt_en1 = _EncoderBlock(3, 64) # 256->128, 4->64
-        self.opt_en2 = _EncoderBlock(64, 256)  # 128->64, 64->256
+        self.opt_en0 = _EncoderBlock(3, 64, downsample=False) # 256->128, 4->64
+        self.opt_en1 = _EncoderBlock(64, 128) # 256->128, 4->64
+        self.opt_en2 = _EncoderBlock(128, 256)  # 128->64, 64->256
         self.opt_en3 = _EncoderBlock(256, 512)  # 64->32, 256->512
         self.opt_en4 = _EncoderBlock(512, 1024)  # 32->32 *** , 512->1024
         self.opt_en5 = _EncoderBlock(1024, 2048, downsample=False)  # 32->32 *** , 1024->2048
 
         self.aspp = BasicRFB(256 * 2, 256)
 
-        self.decoder = nn.Sequential(
+        self.decoder1 = nn.Sequential(
             nn.Conv2d(304, 256, kernel_size=3, stride=1, padding=1),
             nn.Conv2d(256, num_classes, kernel_size=1),
         )
@@ -105,47 +138,71 @@ class SOLCV7(nn.Module):
 
         self.sar_high_level_down = nn.Conv2d(2048, 256, kernel_size=1, stride=1, padding=0)
         self.opt_high_level_down = nn.Conv2d(2048, 256, kernel_size=1, stride=1, padding=0)
+        out_channels=[2**(i+6) for i in range(5)]#[64, 128, 256, 512, 1024]
+        w = 32
+        self.h_de1=UpSampleLayer(out_channels[3],out_channels[3])#512-1024-512
+        self.h_de2=UpSampleLayer(out_channels[4],out_channels[2])#1024-512-256
+        self.h_de3=UpSampleLayer(out_channels[3],out_channels[1])#512-256-128
+        self.h_de4=UpSampleLayer(out_channels[2],out_channels[0])#256-128-64
+        
+        self.o=nn.Sequential(
+            nn.Conv2d(out_channels[1],out_channels[0],kernel_size=3,stride=1,padding=1),
+            nn.BatchNorm2d(out_channels[0]),
+            nn.ReLU(),
+            nn.Conv2d(out_channels[0], out_channels[0], kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(out_channels[0]),
+            nn.ReLU(),
+            nn.Conv2d(out_channels[0],1,3,1,1),
+            nn.Sigmoid(),)
 
 
         initialize_weights(self)
 
     def forward(self, sar, opt):
-        sar_en1 = self.sar_en1(sar)
+        sar_en0 = self.sar_en0(sar)
+        sar_en1 = self.sar_en1(sar_en0)
         sar_en2 = self.sar_en2(sar_en1)
         sar_en3 = self.sar_en3(sar_en2)
         sar_en4 = self.sar_en4(sar_en3)
         sar_en5 = self.sar_en5(sar_en4)
 
-        opt_en1 = self.opt_en1(opt)
-        opt_en2 = self.opt_en2(opt_en1)
-        opt_en3 = self.opt_en3(opt_en2)
-        opt_en4 = self.opt_en4(opt_en3)
+        opt_en0 = self.opt_en0(opt)#512-512
+        opt_en1 = self.opt_en1(opt_en0)#512-256
+        opt_en2 = self.opt_en2(opt_en1)#256-128
+        opt_en3 = self.opt_en3(opt_en2)#128-64
+        opt_en4 = self.opt_en4(opt_en3)#64-32
         opt_en5 = self.opt_en5(opt_en4)
 
         low_level_features = self.low_level_down(sar_en2, opt_en2)
+        #c,2048->256
+        high_level_features_kp = torch.cat([self.sar_high_level_down(sar_en5), self.opt_high_level_down(opt_en5)], 1)
 
-        high_level_features = torch.cat([self.sar_high_level_down(sar_en5), self.opt_high_level_down(opt_en5)], 1)
-
-        high_level_features = self.aspp(high_level_features)
+        high_level_features = self.aspp(high_level_features_kp)
 
         high_level_features = F.upsample(high_level_features, sar_en2.size()[2:], mode='bilinear')
 
         low_high = torch.cat([low_level_features, high_level_features], 1)
 
-        sar_opt_decoder = self.decoder(low_high)
+        sar_opt_decoder = self.decoder1(low_high)
+        mask = F.upsample(sar_opt_decoder, sar.size()[2:], mode='bilinear')#(b,cl,h,w)
         
-        return F.upsample(sar_opt_decoder, sar.size()[2:], mode='bilinear')
+        h_de1 = self.h_de1(high_level_features_kp,opt_en3)
+        h_de2 = self.h_de2(h_de1,opt_en2)
+        h_de3 = self.h_de3(h_de2,opt_en1)#b,256
+        h_de4 = self.h_de4(h_de3,opt_en0)#b,128
+        height = self.o(h_de4)
+        return mask, height
 
 
 if __name__ == "__main__":
-    model = SOLCV7(num_classes=8)
+    model = OURV1(num_classes=2)
     model.cuda(3)
     model.train()
-    size = 256
+    size = 512
     batchsize = 2
     sar = torch.randn(batchsize, 1, size, size).cuda(3)
     opt = torch.randn(batchsize, 3, size, size).cuda(3)
-    output = model(sar,opt)
+    mask,height = model(sar,opt)
     print(model)
     print("input:", sar.shape, opt.shape)
-    print("output:", model(sar, opt).shape)
+    print("output:", mask.shape,height.shape)
