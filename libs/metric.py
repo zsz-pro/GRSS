@@ -2,7 +2,7 @@ import numpy as np
 
 
 def confusion_matrix(pred, label, num_classes):
-    mask = (label >= 0) & (label < num_classes)
+    mask = (label >= 0) & (label < num_classes)#gt
     conf_mat = np.bincount(num_classes * label[mask].astype(int) + pred[mask], minlength=num_classes**2).reshape(num_classes, num_classes)
     return conf_mat
 

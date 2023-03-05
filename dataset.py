@@ -132,5 +132,79 @@ class WHUOPTSARDataset(Dataset):
     def classes(self):
         return self.class_names
 
+class GRSSDataset(Dataset):
+    def __init__(self, class_name, root, mode=None, img_sar_transform=img_sar_transform, img_opt_transform=img_opt_transform, mask_transform=mask_transform, sync_transforms=None):
+        # 数据相关
+        self.class_names = class_name
+        self.mode = mode
+        self.img_sar_transform = img_sar_transform
+        self.img_opt_transform = img_opt_transform
+        self.mask_transform = mask_transform
+        self.sync_transform = sync_transforms
+        self.sync_img_mask = []
+        
+        
+        img_sar_dir = os.path.join(root, 'sar')
+        img_opt_dir = os.path.join(root, 'rgb')
+        # mask_dir = os.path.join(root, 'lbl')
+        # mask_dir = os.path.join(root, 'dsm')
+
+        for img_filename in os.listdir(img_sar_dir):
+            img_mask_pair = (os.path.join(img_sar_dir, img_filename),
+                             os.path.join(img_opt_dir, img_filename))
+                            #  img_filename)
+            self.sync_img_mask.append(img_mask_pair)
+        # print(self.sync_img_mask)
+
+        if (len(self.sync_img_mask)) == 0:
+            print("Found 0 data, please check your dataset!")
+
+
+        # self.img_paths = []
+        # img_path = self.imgs_folder + '/'
+        # img_list = os.listdir(img_path)
+        # img_list.sort()
+        # img_list.sort(key=lambda x: int(x[:-4]))  ##文件名按数字排序
+        # img_nums = len(img_list)
+        # for i in range(img_nums):
+        #     img_name = img_path + img_list[i]
+        #     self.img_paths.append(img_name)
+
+        # self.img_paths = sorted(glob.glob(self.imgs_folder + '/*'))
+    def __getitem__(self, index):
+        img_sar_path, img_opt_path= self.sync_img_mask[index]
+        name = img_sar_path.split("/")[-1]
+        img_sar = Image.open(img_sar_path)#mode:F32
+        img_opt = Image.open(img_opt_path)#mode:rgb
+        # dsm = Image.open(mask_path)  #mode:F32      
+        # mask = dsm.convert('L')#L:8bit
+            
+        # mask = np.array(mask)
+        # ret2, thresh2 = cv2.threshold(mask, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        # ekernel = np.ones((7, 7), np.uint8)
+        # dkernel = np.ones((7, 7), np.uint8)
+        # #开运算 
+        # erosion = cv2.dilate(thresh2, dkernel, iterations=1)
+        # mask = cv2.erode(erosion, ekernel, iterations=1)
+        # mask = Image.fromarray(mask)
+        # # transform
+        if self.sync_transform is not None:
+            img_sar, img_opt = self.sync_transform(img_sar, img_opt)#flip
+        if self.img_sar_transform is not None:
+            img_sar = self.img_sar_transform(img_sar)
+            # dsm = self.img_sar_transform(dsm)   #both sar&dsm are float32,trans2tensor
+            img_opt = self.img_opt_transform(img_opt)
+        # if self.mask_transform is not None:
+        #     mask = self.mask_transform(mask)#float32->torch.int64???
+        '''default_collate: batch must contain tensors, numpy arrays, numbers, dicts or lists'''
+
+        return img_sar, img_opt ,name
+
+    def __len__(self):
+        return len(self.sync_img_mask)
+
+    def classes(self):
+        return self.class_names
+
 if __name__ ==  "__main__":
     pass
